@@ -69,7 +69,7 @@ const char* json_tokener_errors[] = {
 
 const char *json_tokener_error_desc(enum json_tokener_error jerr)
 {
-	if (jerr < 0 || jerr > sizeof(json_tokener_errors))
+	if (jerr > sizeof(json_tokener_errors))
 		return "Unknown error, invalid json_tokener_error value passed to json_tokener_error_desc()";
 	return json_tokener_errors[jerr];
 }
