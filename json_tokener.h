@@ -58,7 +58,9 @@ enum json_tokener_state {
   json_tokener_state_object_field_end,
   json_tokener_state_object_value,
   json_tokener_state_object_value_add,
-  json_tokener_state_object_sep
+  json_tokener_state_object_sep,
+  json_tokener_state_array_after_sep,
+  json_tokener_state_object_field_start_after_sep
 };
 
 struct json_tokener_srec
@@ -69,18 +71,31 @@ struct json_tokener_srec
   char *obj_field_name;
 };
 
-#define JSON_TOKENER_MAX_DEPTH 32
+#define JSON_TOKENER_DEFAULT_DEPTH 32
 
 struct json_tokener
 {
   char *str;
   struct printbuf *pb;
-  int depth, is_double, st_pos, char_offset;
+  int max_depth, depth, is_double, st_pos, char_offset;
   enum json_tokener_error err;
   unsigned int ucs_char;
   char quote_char;
-  struct json_tokener_srec stack[JSON_TOKENER_MAX_DEPTH];
+  struct json_tokener_srec *stack;
+  int flags;
 };
+
+/**
+ * Be strict when parsing JSON input.  Use caution with
+ * this flag as what is considered valid may become more
+ * restrictive from one release to the next, causing your
+ * code to fail on previously working input.
+ *
+ * This flag is not set by default.
+ *
+ * @see json_tokener_set_flags()
+ */
+#define JSON_TOKENER_STRICT  0x01
 
 /**
  * Given an error previously returned by json_tokener_get_error(),
@@ -110,10 +125,16 @@ extern const char* json_tokener_errors[];
 enum json_tokener_error json_tokener_get_error(struct json_tokener *tok);
 
 extern struct json_tokener* json_tokener_new(void);
+extern struct json_tokener* json_tokener_new_ex(int depth);
 extern void json_tokener_free(struct json_tokener *tok);
 extern void json_tokener_reset(struct json_tokener *tok);
 extern struct json_object* json_tokener_parse(const char *str);
 extern struct json_object* json_tokener_parse_verbose(const char *str, enum json_tokener_error *error);
+
+/**
+ * Set flags that control how parsing will be done.
+ */
+extern void json_tokener_set_flags(struct json_tokener *tok, int flags);
 
 /** 
  * Parse a string and return a non-NULL json_object if a valid JSON value

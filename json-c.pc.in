@@ -4,8 +4,8 @@ libdir=@libdir@
 includedir=@includedir@
 
 Name: json-c
-Description: JSON implementation in C, compat shim.  Use json-c instead.
+Description: JSON implementation in C
 Version: @VERSION@
-Requires: json-c
-Libs:
-Cflags:
+Requires: 
+Libs:  -L${libdir} -ljson-c
+Cflags: -I${includedir}/json-c

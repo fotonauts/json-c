@@ -46,6 +46,13 @@ const char *json_hex_chars = "0123456789abcdefABCDEF";
 static void json_object_generic_delete(struct json_object* jso);
 static struct json_object* json_object_new(enum json_type o_type);
 
+static json_object_to_json_string_fn json_object_object_to_json_string;
+static json_object_to_json_string_fn json_object_boolean_to_json_string;
+static json_object_to_json_string_fn json_object_int_to_json_string;
+static json_object_to_json_string_fn json_object_double_to_json_string;
+static json_object_to_json_string_fn json_object_string_to_json_string;
+static json_object_to_json_string_fn json_object_array_to_json_string;
+
 
 /* ref count debugging */
 
@@ -91,6 +98,7 @@ static int json_escape_str(struct printbuf *pb, char *str, int len)
     case '\n':
     case '\r':
     case '\t':
+    case '\f':
     case '"':
     case '\\':
     case '/':
@@ -100,6 +108,7 @@ static int json_escape_str(struct printbuf *pb, char *str, int len)
       else if(c == '\n') printbuf_memappend(pb, "\\n", 2);
       else if(c == '\r') printbuf_memappend(pb, "\\r", 2);
       else if(c == '\t') printbuf_memappend(pb, "\\t", 2);
+      else if(c == '\f') printbuf_memappend(pb, "\\f", 2);
       else if(c == '"') printbuf_memappend(pb, "\\\"", 2);
       else if(c == '\\') printbuf_memappend(pb, "\\\\", 2);
       else if(c == '/') printbuf_memappend(pb, "\\/", 2);
@@ -132,12 +141,20 @@ extern struct json_object* json_object_get(struct json_object *jso)
   return jso;
 }
 
-extern void json_object_put(struct json_object *jso)
+int json_object_put(struct json_object *jso)
 {
-  if(jso) {
-    jso->_ref_count--;
-    if(!jso->_ref_count) jso->_delete(jso);
-  }
+	if(jso)
+	{
+		jso->_ref_count--;
+		if(!jso->_ref_count)
+		{
+			if (jso->_user_delete)
+				jso->_user_delete(jso, jso->_userdata);
+			jso->_delete(jso);
+			return 1;
+		}
+	}
+	return 0;
 }
 
 
@@ -186,6 +203,57 @@ enum json_type json_object_get_type(struct json_object *jso)
     return json_type_null;
   return jso->o_type;
 }
+
+/* set a custom conversion to string */
+
+void json_object_set_serializer(json_object *jso,
+	json_object_to_json_string_fn to_string_func,
+	void *userdata,
+	json_object_delete_fn *user_delete)
+{
+	// First, clean up any previously existing user info
+	if (jso->_user_delete)
+	{
+		jso->_user_delete(jso, jso->_userdata);
+	}
+	jso->_userdata = NULL;
+	jso->_user_delete = NULL;
+
+	if (to_string_func == NULL)
+	{
+		// Reset to the standard serialization function
+		switch(jso->o_type)
+		{
+		case json_type_null:
+			jso->_to_json_string = NULL;
+			break;
+		case json_type_boolean:
+			jso->_to_json_string = &json_object_boolean_to_json_string;
+			break;
+		case json_type_double:
+			jso->_to_json_string = &json_object_double_to_json_string;
+			break;
+		case json_type_int:
+			jso->_to_json_string = &json_object_int_to_json_string;
+			break;
+		case json_type_object:
+			jso->_to_json_string = &json_object_object_to_json_string;
+			break;
+		case json_type_array:
+			jso->_to_json_string = &json_object_array_to_json_string;
+			break;
+		case json_type_string:
+			jso->_to_json_string = &json_object_string_to_json_string;
+			break;
+		}
+		return;
+	}
+
+	jso->_to_json_string = to_string_func;
+	jso->_userdata = userdata;
+	jso->_user_delete = user_delete;
+}
+
 
 /* extended conversion to string */
 
@@ -306,35 +374,56 @@ struct lh_table* json_object_get_object(struct json_object *jso)
 void json_object_object_add(struct json_object* jso, const char *key,
 			    struct json_object *val)
 {
-  lh_table_delete(jso->o.c_object, key);
-  lh_table_insert(jso->o.c_object, strdup(key), val);
+	// We lookup the entry and replace the value, rather than just deleting
+	// and re-adding it, so the existing key remains valid.
+	json_object *existing_value = NULL;
+	struct lh_entry *existing_entry;
+	existing_entry = lh_table_lookup_entry(jso->o.c_object, (void*)key);
+	if (!existing_entry)
+	{
+		lh_table_insert(jso->o.c_object, strdup(key), val);
+		return;
+	}
+	existing_value = (void *)existing_entry->v;
+	if (existing_value)
+		json_object_put(existing_value);
+	existing_entry->v = val;
+}
+
+int json_object_object_length(struct json_object *jso)
+{
+	return lh_table_length(jso->o.c_object);
 }
 
 struct json_object* json_object_object_get(struct json_object* jso, const char *key)
 {
-  struct json_object *result;
-  json_object_object_get_ex(jso, key, &result);
-  return result;
+	struct json_object *result = NULL;
+	json_object_object_get_ex(jso, key, &result);
+	return result;
 }
 
 json_bool json_object_object_get_ex(struct json_object* jso, const char *key, struct json_object **value)
 {
-  if (NULL == jso) return FALSE;
+	if (value != NULL)
+		*value = NULL;
 
-  switch(jso->o_type) {
-  case json_type_object:
-    return lh_table_lookup_ex(jso->o.c_object, (void*)key, (void**)value);
-  default:
-    if (value != NULL) {
-      *value = NULL;
-    }
-    return FALSE;
-  }
+	if (NULL == jso)
+		return FALSE;
+
+	switch(jso->o_type)
+	{
+	case json_type_object:
+		return lh_table_lookup_ex(jso->o.c_object, (void*)key, (void**)value);
+	default:
+		if (value != NULL)
+			*value = NULL;
+		return FALSE;
+	}
 }
 
 void json_object_object_del(struct json_object* jso, const char *key)
 {
-  lh_table_delete(jso->o.c_object, key);
+	lh_table_delete(jso->o.c_object, key);
 }
 
 
@@ -470,7 +559,28 @@ static int json_object_double_to_json_string(struct json_object* jso,
 					     int level,
 						 int flags)
 {
-  return sprintbuf(pb, "%f", jso->o.c_double);
+  char buf[128], *p, *q;
+  int size;
+
+  size = snprintf(buf, 128, "%f", jso->o.c_double);
+  p = strchr(buf, ',');
+  if (p) {
+    *p = '.';
+  } else {
+    p = strchr(buf, '.');
+  }
+  if (p && (flags & JSON_C_TO_STRING_NOZERO)) {
+    /* last useful digit, always keep 1 zero */
+    p++;
+    for (q=p ; *q ; q++) {
+      if (*q!='0') p=q;
+    }
+    /* drop trailing zeroes */
+    *(++p) = 0;
+    size = p-buf;
+  }
+  printbuf_memappend(pb, buf, size);
+  return size;
 }
 
 struct json_object* json_object_new_double(double d)
@@ -538,8 +648,9 @@ struct json_object* json_object_new_string_len(const char *s, int len)
   if(!jso) return NULL;
   jso->_delete = &json_object_string_delete;
   jso->_to_json_string = &json_object_string_to_json_string;
-  jso->o.c_string.str = (char*)malloc(len);
+  jso->o.c_string.str = (char*)malloc(len + 1);
   memcpy(jso->o.c_string.str, (void *)s, len);
+  jso->o.c_string.str[len] = '\0';
   jso->o.c_string.len = len;
   return jso;
 }
