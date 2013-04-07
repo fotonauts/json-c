@@ -1,14 +1,4 @@
-//
-//  json_config.h
-//  mongo-objc-driver
-//
-//  Created by Jérôme Lebel on 24/07/12.
-//  Copyright (c) 2012 Fotonauts. All rights reserved.
-//
+/* json_config.h.  Generated from json_config.h.in by configure.  */
 
-#ifndef mongo_objc_driver_json_config_h
-#define mongo_objc_driver_json_config_h
-
-
-
-#endif
+/* Define to 1 if you have the <inttypes.h> header file. */
+#define JSON_C_HAVE_INTTYPES_H 1
