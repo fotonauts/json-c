@@ -33,7 +33,13 @@ enum json_tokener_error {
   json_tokener_error_parse_object_key_sep,
   json_tokener_error_parse_object_value_sep,
   json_tokener_error_parse_string,
-  json_tokener_error_parse_comment
+  json_tokener_error_parse_comment,
+  json_tokener_error_parse_bindata,
+  json_tokener_error_parse_bindata_open_parenthese,
+  json_tokener_error_parse_bindata_type,
+  json_tokener_error_parse_bindata_type_too_big,
+  json_tokener_error_parse_bindata_type_missing_comma,
+  json_tokener_error_parse_bindata_type_binary,
 };
 
 enum json_tokener_state {
@@ -60,7 +66,12 @@ enum json_tokener_state {
   json_tokener_state_object_value_add,
   json_tokener_state_object_sep,
   json_tokener_state_array_after_sep,
-  json_tokener_state_object_field_start_after_sep
+  json_tokener_state_object_field_start_after_sep,
+  json_tokener_state_bindata_start,
+  json_tokener_state_bindata_open_parenthese,
+  json_tokener_state_bindata_type,
+  json_tokener_state_bindata_comma,
+  json_tokener_state_bindata_data,
 };
 
 struct json_tokener_srec
@@ -81,6 +92,7 @@ struct json_tokener
   enum json_tokener_error err;
   unsigned int ucs_char;
   char quote_char;
+  unsigned char binary_type;
   struct json_tokener_srec *stack;
   int flags;
 };
