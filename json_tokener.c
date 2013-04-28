@@ -52,6 +52,7 @@
 static const char* json_null_str = "null";
 static const char* json_true_str = "true";
 static const char* json_false_str = "false";
+static const char* json_bindata_str = "bindata";
 
 // XXX after v0.10 this array will become static:
 const char* json_tokener_errors[] = {
@@ -287,6 +288,12 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
 	saved_state = json_tokener_state_array;
 	current = json_object_new_array();
 	break;
+      case 'b':
+      case 'B':
+	state = json_tokener_state_bindata;
+	printbuf_reset(tok->pb);
+	tok->st_pos = 0;
+	goto redo_char;
       case 'N':
       case 'n':
 	state = json_tokener_state_null;
@@ -565,6 +572,128 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
       }
       break;
 
+        case json_tokener_state_bindata:
+            printbuf_memappend_fast(tok->pb, &c, 1);
+            if(strncasecmp(json_bindata_str, tok->pb->buf,
+                           json_min(tok->st_pos+1, (int)strlen(json_bindata_str))) == 0) {
+                if(tok->st_pos == (int)strlen(json_bindata_str)) {
+                    saved_state = json_tokener_state_bindata_open_parenthese;
+                    state = json_tokener_state_eatws;
+                    goto redo_char;
+                }
+            } else {
+                tok->err = json_tokener_error_parse_boolean;
+                goto out;
+            }
+            tok->st_pos++;
+            break;
+            
+        case json_tokener_state_bindata_open_parenthese:
+            if(c == '(') {
+                saved_state = json_tokener_state_bindata_type;
+                state = json_tokener_state_eatws;
+            } else {
+                tok->err = json_tokener_error_parse_bindata_open_parenthese;
+                goto out;
+            }
+            break;
+        case json_tokener_state_bindata_type:
+        {
+            /* Advance until we change state */
+            const char *case_start = str;
+            int case_len=0;
+            while(c && strchr(json_binary_type_chars, c)) {
+                ++case_len;
+                if (!ADVANCE_CHAR(str, tok) || !PEEK_CHAR(c, tok)) {
+                    printbuf_memappend_fast(tok->pb, case_start, case_len);
+                    goto out;
+                }
+            }
+            if (case_len>0)
+                printbuf_memappend_fast(tok->pb, case_start, case_len);
+        }
+        {
+            int64_t num64;
+            if (json_parse_int64(tok->pb->buf, &num64) != 0) {
+                tok->err = json_tokener_error_parse_bindata_type;
+                goto out;
+            } else if (num64 >= 256) {
+                tok->err = json_tokener_error_parse_bindata_type_too_big;
+                goto out;
+            } else {
+                tok->binary_type = num64;
+            }
+            saved_state = json_tokener_state_bindata_comma;
+            state = json_tokener_state_eatws;
+            goto redo_char;
+        }
+            break;
+        case json_tokener_state_bindata_comma:
+            if(c == ',') {
+                saved_state = json_tokener_state_bindata_data;
+                state = json_tokener_state_eatws;
+            } else {
+                tok->err = json_tokener_error_parse_bindata_type_missing_comma;
+                goto out;
+            }
+            break;
+        case json_tokener_state_bindata_data:
+            if (c == '"' || c == '\'') {
+                /* Advance until we change state */
+                const char *case_start = str;
+                int case_len=1;
+
+                tok->quote_char = c;
+                while(c && strchr(json_binary_type_chars, c)) {
+                    ++case_len;
+                    if (!ADVANCE_CHAR(str, tok) || !PEEK_CHAR(c, tok)) {
+                        printbuf_memappend_fast(tok->pb, case_start, case_len);
+                        goto out;
+                    }
+                }
+                switch (case_len % 4) {
+                    case 1:
+                        tok->err = json_tokener_error_parse_bindata_type_binary;
+                        goto out;
+                        break;
+                    case 2:
+                        if (c != "=") {
+                            tok->err = json_tokener_error_parse_bindata_type_binary;
+                            goto out;
+                        }
+                        ++case_len;
+                        if (!ADVANCE_CHAR(str, tok) || !PEEK_CHAR(c, tok)) {
+                            printbuf_memappend_fast(tok->pb, case_start, case_len);
+                            goto out;
+                        }
+                    case 3:
+                        if (c != "=") {
+                            tok->err = json_tokener_error_parse_bindata_type_binary;
+                            goto out;
+                        }
+                        ++case_len;
+                        if (!ADVANCE_CHAR(str, tok) || !PEEK_CHAR(c, tok)) {
+                            printbuf_memappend_fast(tok->pb, case_start, case_len);
+                            goto out;
+                        }
+                        break;
+                        
+                    default:
+                        break;
+                }
+                if (c != tok->quote_char) {
+                    tok->err = json_tokener_error_parse_bindata_type_binary;
+                    goto out;
+                }
+                if (!ADVANCE_CHAR(str, tok) || !PEEK_CHAR(c, tok)) {
+                    printbuf_memappend_fast(tok->pb, case_start, case_len);
+                    goto out;
+                }
+                printbuf_memappend_fast(tok->pb, case_start, case_len);
+            } else {
+                tok->err = json_tokener_error_parse_bindata_type_binary;
+                goto out;
+            }
     case json_tokener_state_boolean:
       printbuf_memappend_fast(tok->pb, &c, 1);
       if(strncasecmp(json_true_str, tok->pb->buf,
