@@ -14,6 +14,7 @@
 #define _DEBUG_H_
 
 #include <stdlib.h>
+#include <assert.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,8 +42,7 @@ extern void mc_info(const char *msg, ...);
 #define JASSERT(cond) do { \
 		if (!(cond)) { \
 			mc_error("cjson assert failure %s:%d : cond \"" __STRING(cond) "failed\n", __FILE__, __LINE__); \
-			*(int *)0 = 1;\
-			abort(); \
+            assert(0);\
 		}\
 	} while(0)
 
