@@ -132,7 +132,7 @@ int json_object_put(struct json_object *obj);
      json_type_array,
      json_type_string,
  */
-extern int json_object_is_type(struct json_object *obj, enum json_type type);
+extern int json_object_is_type(const struct json_object *obj, enum json_type type);
 
 /**
  * Get the type of the json_object.  See also json_type_to_name() to turn this
