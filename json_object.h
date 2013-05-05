@@ -55,6 +55,8 @@ extern "C" {
 
 extern const char *json_number_chars;
 extern const char *json_hex_chars;
+extern const char *json_binary_type_chars;
+extern const char *json_base64_chars;
 
 /* CAW: added for ANSI C iteration correctness */
 struct json_object_iter
