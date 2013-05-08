@@ -593,6 +593,8 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
             if(c == '(') {
                 saved_state = json_tokener_state_bindata_type;
                 state = json_tokener_state_eatws;
+                printbuf_reset(tok->pb);
+                tok->st_pos = 0;
             } else {
                 tok->err = json_tokener_error_parse_bindata_open_parenthese;
                 goto out;
@@ -610,7 +612,6 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
                     goto out;
                 }
             }
-            printf("%d %d %d\n", ((tok->pb->size - tok->pb->bpos) > (size_t)(case_len)), (int)(tok->pb->size - tok->pb->bpos), (int)(case_len));
             if (case_len>0)
                 printbuf_memappend_fast(tok->pb, case_start, case_len);
             else {
@@ -647,10 +648,14 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
             if (c == '"' || c == '\'') {
                 /* Advance until we change state */
                 const char *case_start = str;
-                int case_len=1;
+                int case_len=0;
 
                 tok->quote_char = c;
-                while(c && strchr(json_binary_type_chars, c)) {
+                if (!ADVANCE_CHAR(str, tok) || !PEEK_CHAR(c, tok)) {
+                    printbuf_memappend_fast(tok->pb, case_start, case_len);
+                    goto out;
+                }
+                while(c && strchr(json_base64_chars, c)) {
                     ++case_len;
                     if (!ADVANCE_CHAR(str, tok) || !PEEK_CHAR(c, tok)) {
                         printbuf_memappend_fast(tok->pb, case_start, case_len);
@@ -930,6 +935,9 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
     for(ii = tok->depth; ii >= 0; ii--)
       json_tokener_reset_level(tok, ii);
     return ret;
+  }else {
+      printf("zob %d\n", tok->err);
+      printf("");
   }
 
   MC_DEBUG("json_tokener_parse_ex: error %s at offset %d\n",
