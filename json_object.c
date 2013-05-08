@@ -43,7 +43,7 @@
 const char *json_number_chars = "0123456789.+-eE";
 const char *json_hex_chars = "0123456789abcdefABCDEF";
 const char *json_binary_type_chars = "0123456789";
-const char *json_base64_chars = "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM0123456789+/"
+const char *json_base64_chars = "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM0123456789+/";
 
 static void json_object_generic_delete(struct json_object* jso);
 static struct json_object* json_object_new(enum json_type o_type);
@@ -53,6 +53,7 @@ static json_object_to_json_string_fn json_object_boolean_to_json_string;
 static json_object_to_json_string_fn json_object_int_to_json_string;
 static json_object_to_json_string_fn json_object_double_to_json_string;
 static json_object_to_json_string_fn json_object_string_to_json_string;
+static json_object_to_json_string_fn json_object_binary_to_json_string;
 static json_object_to_json_string_fn json_object_array_to_json_string;
 
 
@@ -246,6 +247,9 @@ void json_object_set_serializer(json_object *jso,
 			break;
 		case json_type_string:
 			jso->_to_json_string = &json_object_string_to_json_string;
+			break;
+		case json_type_binary:
+			jso->_to_json_string = &json_object_binary_to_json_string;
 			break;
 		}
 		return;
@@ -673,6 +677,69 @@ size_t json_object_get_string_len(struct json_object *jso)  {
   switch(jso->o_type) {
   case json_type_string:
     return jso->o.c_string.len;
+  default:
+    return 0;
+  }
+}
+
+
+/* json_object_binary */
+
+static long long json_object_binary_to_json_string(struct json_object* jso,
+					     struct printbuf *pb,
+					     int level,
+						 int flags)
+{
+  sprintbuf(pb, "\"");
+  json_escape_str(pb, jso->o.binary.str, jso->o.binary.len);
+  sprintbuf(pb, "\"");
+  return 0;
+}
+
+static void json_object_binary_delete(struct json_object* jso)
+{
+  free(jso->o.binary.str);
+  json_object_generic_delete(jso);
+}
+
+struct json_object* json_object_new_binary(int binary_type, const char *binary)
+{
+    struct json_object *jso = json_object_new(json_type_binary);
+    if(!jso) return NULL;
+    jso->_delete = &json_object_binary_delete;
+    jso->_to_json_string = &json_object_binary_to_json_string;
+    jso->o.binary.str = strdup(binary);
+    jso->o.binary.len = strlen(binary);
+    jso->o.binary.type = binary_type;
+    return jso;
+}
+
+const char* json_object_get_binary(struct json_object *jso)
+{
+  if(!jso) return NULL;
+  switch(jso->o_type) {
+  case json_type_binary:
+    return jso->o.binary.str;
+  default:
+    return NULL;
+  }
+}
+
+size_t json_object_get_binary_len(struct json_object *jso)  {
+  if(!jso) return 0;
+  switch(jso->o_type) {
+  case json_type_binary:
+    return jso->o.binary.len;
+  default:
+    return 0;
+  }
+}
+
+size_t json_object_get_binary_type(struct json_object *jso)  {
+  if(!jso) return 0;
+  switch(jso->o_type) {
+  case json_type_binary:
+    return jso->o.binary.type;
   default:
     return 0;
   }

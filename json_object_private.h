@@ -35,6 +35,11 @@ struct json_object
         char *str;
         size_t len;
     } c_string;
+    struct {
+        char *str;
+        size_t len;
+        int type;
+    } binary;
   } o;
   json_object_delete_fn *_user_delete;
   void *_userdata;

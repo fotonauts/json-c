@@ -290,7 +290,7 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
 	break;
       case 'b':
       case 'B':
-	state = json_tokener_state_bindata;
+    state = json_tokener_state_bindata_start;
 	printbuf_reset(tok->pb);
 	tok->st_pos = 0;
 	goto redo_char;
@@ -572,10 +572,11 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
       }
       break;
 
-        case json_tokener_state_bindata:
+        case json_tokener_state_bindata_start:
             printbuf_memappend_fast(tok->pb, &c, 1);
             if(strncasecmp(json_bindata_str, tok->pb->buf,
                            json_min(tok->st_pos+1, (int)strlen(json_bindata_str))) == 0) {
+                printf("%d %d\n", tok->st_pos, (int)strlen(json_bindata_str));
                 if(tok->st_pos == (int)strlen(json_bindata_str)) {
                     saved_state = json_tokener_state_bindata_open_parenthese;
                     state = json_tokener_state_eatws;
@@ -609,8 +610,13 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
                     goto out;
                 }
             }
+            printf("%d %d %d\n", ((tok->pb->size - tok->pb->bpos) > (size_t)(case_len)), (int)(tok->pb->size - tok->pb->bpos), (int)(case_len));
             if (case_len>0)
                 printbuf_memappend_fast(tok->pb, case_start, case_len);
+            else {
+                tok->err = json_tokener_error_parse_bindata_type_missing;
+                goto out;
+            }
         }
         {
             int64_t num64;
@@ -651,14 +657,18 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
                         goto out;
                     }
                 }
+                if (c != tok->quote_char && c != '=') {
+                    tok->err = json_tokener_error_parse_bindata_invalid_character;
+                    goto out;
+                }
                 switch (case_len % 4) {
                     case 1:
-                        tok->err = json_tokener_error_parse_bindata_type_binary;
+                        tok->err = json_tokener_error_parse_bindata_wrong_size_binary;
                         goto out;
                         break;
                     case 2:
-                        if (c != "=") {
-                            tok->err = json_tokener_error_parse_bindata_type_binary;
+                        if (c != '=') {
+                            tok->err = json_tokener_error_parse_bindata_padding_missing;
                             goto out;
                         }
                         ++case_len;
@@ -667,8 +677,8 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
                             goto out;
                         }
                     case 3:
-                        if (c != "=") {
-                            tok->err = json_tokener_error_parse_bindata_type_binary;
+                        if (c != '=') {
+                            tok->err = json_tokener_error_parse_bindata_padding_missing;
                             goto out;
                         }
                         ++case_len;
@@ -682,7 +692,7 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
                         break;
                 }
                 if (c != tok->quote_char) {
-                    tok->err = json_tokener_error_parse_bindata_type_binary;
+                    tok->err = json_tokener_error_parse_bindata_invalid_character;
                     goto out;
                 }
                 if (!ADVANCE_CHAR(str, tok) || !PEEK_CHAR(c, tok)) {
@@ -690,10 +700,22 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
                     goto out;
                 }
                 printbuf_memappend_fast(tok->pb, case_start, case_len);
+                saved_state = json_tokener_state_bindata_close_parenthese;
+                state = json_tokener_state_eatws;
             } else {
-                tok->err = json_tokener_error_parse_bindata_type_binary;
+                tok->err = json_tokener_error_parse_bindata_invalid_character;
                 goto out;
             }
+        case json_tokener_state_bindata_close_parenthese:
+            if(c == ')') {
+                saved_state = json_tokener_state_finish;
+                state = json_tokener_state_eatws;
+                current = json_object_new_binary(tok->binary_type, tok->str);
+            } else {
+                tok->err = json_tokener_error_parse_bindata_close_parenthese;
+                goto out;
+            }
+            break;
     case json_tokener_state_boolean:
       printbuf_memappend_fast(tok->pb, &c, 1);
       if(strncasecmp(json_true_str, tok->pb->buf,
