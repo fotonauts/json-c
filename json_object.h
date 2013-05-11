@@ -545,10 +545,12 @@ extern struct json_object* json_object_new_string_len(const char *s, size_t len)
  * @param s the binary
  * @returns a json_object of type json_type_binary
  */
-extern struct json_object* json_object_new_binary(int binary_type, const char *binary);
+extern struct json_object* json_object_new_binary(int binary_type, const char *binary, size_t length);
 extern const char* json_object_get_binary(struct json_object *jso);
 extern size_t json_object_get_binary_len(struct json_object *jso);
-extern size_t json_object_get_binary_type(struct json_object *jso);
+extern int json_object_get_binary_type(struct json_object *jso);
+extern void json_object_set_binary_type(struct json_object *jso, int binary_type);
+extern void json_object_set_binary(struct json_object *jso, const char *binary, size_t length);
 
 /** Get the string value of a json_object
  *

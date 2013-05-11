@@ -91,13 +91,11 @@ struct json_tokener_srec
 
 struct json_tokener
 {
-  char *str;
   struct printbuf *pb;
   int max_depth, depth, is_double, st_pos, char_offset;
   enum json_tokener_error err;
   unsigned int ucs_char;
   char quote_char;
-  unsigned char binary_type;
   struct json_tokener_srec *stack;
   int flags;
 };

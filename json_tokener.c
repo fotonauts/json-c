@@ -576,7 +576,6 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
             printbuf_memappend_fast(tok->pb, &c, 1);
             if(strncasecmp(json_bindata_str, tok->pb->buf,
                            json_min(tok->st_pos+1, (int)strlen(json_bindata_str))) == 0) {
-                printf("%d %d\n", tok->st_pos, (int)strlen(json_bindata_str));
                 if(tok->st_pos == (int)strlen(json_bindata_str)) {
                     saved_state = json_tokener_state_bindata_open_parenthese;
                     state = json_tokener_state_eatws;
@@ -628,7 +627,7 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
                 tok->err = json_tokener_error_parse_bindata_type_too_big;
                 goto out;
             } else {
-                tok->binary_type = num64;
+                current = json_object_new_binary((int)num64, NULL, 0);
             }
             saved_state = json_tokener_state_bindata_comma;
             state = json_tokener_state_eatws;
@@ -704,6 +703,7 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
                     printbuf_memappend_fast(tok->pb, case_start, case_len);
                     goto out;
                 }
+                json_object_set_binary(current, case_start + 1, case_len);
                 printbuf_memappend_fast(tok->pb, case_start, case_len);
                 saved_state = json_tokener_state_bindata_close_parenthese;
                 state = json_tokener_state_eatws;
@@ -715,7 +715,6 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
             if(c == ')') {
                 saved_state = json_tokener_state_finish;
                 state = json_tokener_state_eatws;
-                current = json_object_new_binary(tok->binary_type, tok->str);
             } else {
                 tok->err = json_tokener_error_parse_bindata_close_parenthese;
                 goto out;
