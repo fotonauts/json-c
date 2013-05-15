@@ -683,6 +683,25 @@ size_t json_object_get_string_len(struct json_object *jso)  {
 }
 
 
+/* json_object_objectid */
+
+struct json_object* json_object_new_objectid(const char *binary, size_t length)
+{
+    struct json_object *jso = json_object_new(json_type_binary);
+    if(!jso) return NULL;
+    jso->_delete = &json_object_binary_delete;
+    jso->_to_json_string = &json_object_binary_to_json_string;
+    if (binary) {
+        jso->o.binary.str = strndup(binary, length);
+        jso->o.binary.len = length;
+    } else {
+        jso->o.binary.str = NULL;
+        jso->o.binary.len = 0;
+    }
+    jso->o.binary.type = binary_type;
+    return jso;
+}
+
 /* json_object_binary */
 
 static long long json_object_binary_to_json_string(struct json_object* jso,

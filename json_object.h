@@ -101,6 +101,7 @@ typedef enum json_type {
   json_type_array,
   json_type_string,
   json_type_binary,
+  json_type_objectid,
 } json_type;
 
 /* reference counting functions */

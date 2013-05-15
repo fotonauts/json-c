@@ -53,6 +53,7 @@ static const char* json_null_str = "null";
 static const char* json_true_str = "true";
 static const char* json_false_str = "false";
 static const char* json_bindata_str = "bindata";
+static const char* json_objectid_str = "objectid";
 
 // XXX after v0.10 this array will become static:
 const char* json_tokener_errors[] = {
@@ -291,6 +292,12 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
       case 'b':
       case 'B':
     state = json_tokener_state_bindata_start;
+	printbuf_reset(tok->pb);
+	tok->st_pos = 0;
+	goto redo_char;
+      case 'o':
+      case 'O':
+    state = json_tokener_state_objectid;
 	printbuf_reset(tok->pb);
 	tok->st_pos = 0;
 	goto redo_char;
@@ -571,7 +578,67 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
 	}
       }
       break;
-
+        case json_tokener_state_objectid:
+            printbuf_memappend_fast(tok->pb, &c, 1);
+            if(strncasecmp(json_objectid_str, tok->pb->buf,
+                           json_min(tok->st_pos+1, (int)strlen(json_objectid_str))) == 0) {
+                if(tok->st_pos == (int)strlen(json_objectid_str)) {
+                    saved_state = json_tokener_state_objectid_open_parenthese;
+                    state = json_tokener_state_eatws;
+                    goto redo_char;
+                }
+            } else {
+                tok->err = json_tokener_error_parse_objectid;
+                goto out;
+            }
+            tok->st_pos++;
+            break;
+        case json_tokener_state_objectid_open_parenthese:
+            if(c == '(') {
+                saved_state = json_tokener_state_objectid_value;
+                state = json_tokener_state_eatws;
+                printbuf_reset(tok->pb);
+                tok->st_pos = 0;
+            } else {
+                tok->err = json_tokener_error_parse_objectid_open_parenthese;
+                goto out;
+            }
+            break;
+        case json_tokener_state_objectid_value:
+            if (c == '"' || c == '\'') {
+                /* Advance until we change state */
+                const char *case_start = str;
+                int case_len=0;
+                
+                tok->quote_char = c;
+                if (!ADVANCE_CHAR(str, tok) || !PEEK_CHAR(c, tok)) {
+                    printbuf_memappend_fast(tok->pb, case_start, case_len);
+                    goto out;
+                }
+                while(c && strchr(json_hex_chars, c)) {
+                    ++case_len;
+                    if (!ADVANCE_CHAR(str, tok) || !PEEK_CHAR(c, tok)) {
+                        printbuf_memappend_fast(tok->pb, case_start, case_len);
+                        goto out;
+                    }
+                }
+                if (c != tok->quote_char) {
+                    tok->err = json_tokener_error_parse_objectid_invalid_character;
+                    goto out;
+                }
+                if (!ADVANCE_CHAR(str, tok) || !PEEK_CHAR(c, tok)) {
+                    printbuf_memappend_fast(tok->pb, case_start, case_len);
+                    goto out;
+                }
+                current = 
+                printbuf_memappend_fast(tok->pb, case_start, case_len);
+                saved_state = json_tokener_state_objectid_close_parenthese;
+                state = json_tokener_state_eatws;
+            } else {
+                tok->err = json_tokener_error_parse_objectid_invalid_character;
+                goto out;
+            }
+            break;
         case json_tokener_state_bindata_start:
             printbuf_memappend_fast(tok->pb, &c, 1);
             if(strncasecmp(json_bindata_str, tok->pb->buf,
@@ -582,7 +649,7 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
                     goto redo_char;
                 }
             } else {
-                tok->err = json_tokener_error_parse_boolean;
+                tok->err = json_tokener_error_parse_bindata;
                 goto out;
             }
             tok->st_pos++;
@@ -711,6 +778,7 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
                 tok->err = json_tokener_error_parse_bindata_invalid_character;
                 goto out;
             }
+            break;
         case json_tokener_state_bindata_close_parenthese:
             if(c == ')') {
                 saved_state = json_tokener_state_finish;

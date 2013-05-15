@@ -44,6 +44,9 @@ enum json_tokener_error {
   json_tokener_error_parse_bindata_wrong_size_binary,
   json_tokener_error_parse_bindata_padding_missing,
   json_tokener_error_parse_bindata_close_parenthese,
+  json_tokener_error_parse_objectid,
+  json_tokener_error_parse_objectid_open_parenthese,
+  json_tokener_error_parse_objectid_invalid_character,
 };
 
 enum json_tokener_state {
@@ -77,6 +80,10 @@ enum json_tokener_state {
   json_tokener_state_bindata_comma,
   json_tokener_state_bindata_data,
   json_tokener_state_bindata_close_parenthese,
+  json_tokener_state_objectid,
+  json_tokener_state_objectid_open_parenthese,
+  json_tokener_state_objectid_value,
+  json_tokener_state_objectid_close_parenthese,
 };
 
 struct json_tokener_srec
